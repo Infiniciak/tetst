@@ -60,36 +60,36 @@ $env:REDIS_URL = 'redis://localhost:6379/0'
 | Przywrócenie Redis, możliwa stara wartość | Powrót połączenia | Powrót buforowania | Zgodny | Automatyczny |
 
 Testy z LAB1:
-- **Test Health**: Sprawdza poprawność działania endpointu /health i zwracany status usługi.   
-- **Test listy i szczegółów**: Weryfikuje poprawność pobierania listy zgłoszeń oraz szczegółów konkretnego zasobu.   
-- **Test zapisu i odczytu**: Testuje poprawne utworzenie nowego zgłoszenia (POST /reports) i jego odczyt.   
-- **Test braku zasobu**: Sprawdza zwrócenie kodu 404 Not Found dla nieistniejącego identyfikatora.   
-- **Test usunięcia zasobu**: Weryfikuje usunięcie zgłoszenia kończące się kodem 204 No Content.   
-- **Test błędnych danych**: Sprawdza obsługę błędów walidacji danych wejściowych biblioteki Pydantic (422 Unprocessable Entity).   
-- **Test konfliktu**: Weryfikuje zwrócenie kodu 409 Conflict przy próbie utworzenia zgłoszenia z duplikatem opisu.   
-- **Test reguły biznesowej**: Sprawdza zachowanie dozwolonych i niedozwolonych operacji bez zmiany stanu bazy.   
-- **Test restartu**: Sprawdza zachowanie systemu po restarcie procesu i wyczyszczeniu stanu pamięci.   
+- **Test Health:** Sprawdza poprawność działania endpointu /health i zwracany status usługi.   
+- **Test listy i szczegółów:** Weryfikuje poprawność pobierania listy zgłoszeń oraz szczegółów konkretnego zasobu.   
+- **Test zapisu i odczytu:** Testuje poprawne utworzenie nowego zgłoszenia (POST /reports) i jego odczyt.   
+- **Test braku zasobu:** Sprawdza zwrócenie kodu 404 Not Found dla nieistniejącego identyfikatora.   
+- **Test usunięcia zasobu:** Weryfikuje usunięcie zgłoszenia kończące się kodem 204 No Content.   
+- **Test błędnych danych:** Sprawdza obsługę błędów walidacji danych wejściowych biblioteki Pydantic (422 Unprocessable Entity).   
+- **Test konfliktu:** Weryfikuje zwrócenie kodu 409 Conflict przy próbie utworzenia zgłoszenia z duplikatem opisu.   
+- **Test reguły biznesowej:** Sprawdza zachowanie dozwolonych i niedozwolonych operacji bez zmiany stanu bazy.   
+- **Test restartu:** Sprawdza zachowanie systemu po restarcie procesu i wyczyszczeniu stanu pamięci.   
 
 Testy z LAB2 z użyciem zamiennika:
-- **Test perspektywy nowej instancji silnika (test_persists_with_new_engine)**: Sprawdza trwałość danych i poprawność odczytu przy użyciu nowej sesji bazy danych.   
-- **Test wycofania duplikatu (test_duplicate_rolls_back)**: Weryfikuje, że próba dodania zduplikowanego zgłoszenia wywołuje błąd i wycofuje transakcję, zachowując spójność bazy.   
-- **Test cyklu MISS → HIT i inwalidacji (test_miss_hit_and_invalidation)**: Sprawdza poprawne przejście cache ze stanu MISS do HIT oraz inwalidację (usuwanie) klucza po usunięciu zasobu.   
-- **Test odporności na błąd zapisu (test_failed_cache_set_still_returns_database_value)**: Weryfikuje, że błąd podczas zapisu do cache nie przerywa działania aplikacji i poprawnie zwraca wartość bezpośrednio z bazy danych. 
+- **Test perspektywy nowej instancji silnika (test_persists_with_new_engine):** Sprawdza trwałość danych i poprawność odczytu przy użyciu nowej sesji bazy danych.   
+- **Test wycofania duplikatu (test_duplicate_rolls_back):** Weryfikuje, że próba dodania zduplikowanego zgłoszenia wywołuje błąd i wycofuje transakcję, zachowując spójność bazy.   
+- **Test cyklu MISS → HIT i inwalidacji (test_miss_hit_and_invalidation):** Sprawdza poprawne przejście cache ze stanu MISS do HIT oraz inwalidację (usuwanie) klucza po usunięciu zasobu.   
+- **Test odporności na błąd zapisu (test_failed_cache_set_still_returns_database_value):** Weryfikuje, że błąd podczas zapisu do cache nie przerywa działania aplikacji i poprawnie zwraca wartość bezpośrednio z bazy danych. 
 
 Ręczne próby z rzeczywistym Redis:
-- **Test polecenia PING**: Weryfikacja poprawnego połączenia z prawdziwym serwerem Redis.   
-- **Weryfikacja MISS → HIT oraz TTL**: Sprawdzenie przejścia ze stanu MISS do HIT przy ponownym odczycie oraz kontrola czasu życia (TTL) utworzonego klucza.   
-- **Odczyt po wygaśnięciu TTL**: Obserwacja zachowania systemu i odświeżenia danych po upływie zdefiniowanego czasu TTL.   
-- **Odłączenie klienta (Tryb BYPASS)**: Zmiana adresu REDIS_URL na nieużywany port w celu symulacji awarii i sprawdzenia, czy operacje przechodzą w tryb BYPASS.   
-- **Operacja modyfikacji przy awarii**: Sprawdzenie zachowania systemu i stanu bazy podczas próby edycji danych w warunkach niedostępności cache.   
-- **Przywrócenie konfiguracji Redis**: Przywrócenie poprawnego adresu serwera, weryfikacja wystąpienia starej wartości (przed wygaśnięciem TTL) oraz przejścia na aktualną wartość z bazy po upływie TTL.   
+- **Test polecenia PING:** Weryfikacja poprawnego połączenia z prawdziwym serwerem Redis.   
+- **Weryfikacja MISS → HIT oraz TTL:** Sprawdzenie przejścia ze stanu MISS do HIT przy ponownym odczycie oraz kontrola czasu życia (TTL) utworzonego klucza.   
+- **Odczyt po wygaśnięciu TTL:** Obserwacja zachowania systemu i odświeżenia danych po upływie zdefiniowanego czasu TTL.   
+- **Odłączenie klienta (Tryb BYPASS):** Zmiana adresu REDIS_URL na nieużywany port w celu symulacji awarii i sprawdzenia, czy operacje przechodzą w tryb BYPASS.   
+- **Operacja modyfikacji przy awarii:** Sprawdzenie zachowania systemu i stanu bazy podczas próby edycji danych w warunkach niedostępności cache.   
+- **Przywrócenie konfiguracji Redis:** Przywrócenie poprawnego adresu serwera, weryfikacja wystąpienia starej wartości (przed wygaśnięciem TTL) oraz przejścia na aktualną wartość z bazy po upływie TTL.   
 
 ## Porównanie i ograniczenia
 
-- **Nieudane unieważnienie**: Jeśli podczas modyfikacji lub usunięcia zasobu w bazie danych wystąpi problem z połączeniem z Redisem, Usunięcia klucza z cache może się nie udać. W pamięci cache pozostanie stara wartość, która będzie zwracana klientom aż do momentu wygaśnięcia TTL.   
-- **Współbieżność**: Prosty cache-aside nie rozwiązuje problemu współbieżności i nie gwarantuje spójności danych w przypadku wykonywania wielu operacji zapisu i odczytu w  przez różne wątki lub procesy w tym samym czasie.   
-- **Zmiany schematu**: Baza danych SQLite jest tworzona automatycznie przy użyciu metody create_all, przez cokażda modyfikacja struktury tabel zgłoszeń wymaga migracji schematu lub ręcznego odtworzenia bazy, ponieważ tabele nie są aktualizowane z tą metodą.
-- **Zastosowanie cache jest uzasadnione dla usługi obsługującej zgłoszenia IT, ponieważ operacje odczytu szczegółów zgłoszeń są częste, a chwilowa nieaktualność danych nie wpływa negatywnie na proces biznesowy, dzięki czemu odciąża bazę danych i skraca czas odpowiedzi od API.
+- **Nieudane unieważnienie:** Jeśli podczas modyfikacji lub usunięcia zasobu w bazie danych wystąpi problem z połączeniem z Redisem, Usunięcia klucza z cache może się nie udać. W pamięci cache pozostanie stara wartość, która będzie zwracana klientom aż do momentu wygaśnięcia TTL.   
+- **Współbieżność:** Prosty cache-aside nie rozwiązuje problemu współbieżności i nie gwarantuje spójności danych w przypadku wykonywania wielu operacji zapisu i odczytu w  przez różne wątki lub procesy w tym samym czasie.   
+- **Zmiany schematu:** Baza danych SQLite jest tworzona automatycznie przy użyciu metody create_all, przez cokażda modyfikacja struktury tabel zgłoszeń wymaga migracji schematu lub ręcznego odtworzenia bazy, ponieważ tabele nie są aktualizowane z tą metodą.
+- **Zastosowanie cache** jest uzasadnione dla usługi obsługującej zgłoszenia IT, ponieważ operacje odczytu szczegółów zgłoszeń są częste, a chwilowa nieaktualność danych nie wpływa negatywnie na proces biznesowy, dzięki czemu odciąża bazę danych i skraca czas odpowiedzi od API.
 
 ## Dokumentacja i autorzy
 
