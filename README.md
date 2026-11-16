@@ -1,82 +1,63 @@
-# Report Service - LAB3
+# Pakiet pomocniczy LAB4
 
-Projekt tworzy architekturę opartą na dwóch mikrousługach zintegrowanych z **Eureka Server**, wykorzystujących bazę danych SQLite i pamięć cache Redis z LAB2.
+Pakiet należy wykorzystać razem z serwerem Eureka oraz dwiema usługami demonstracyjnymi z pakietu pomocniczego LAB3. Zawiera on gotowy szkielet bramki Spring Cloud Gateway (Server WebFlux), zestaw pięciu testów integracyjnych przykładu oraz szablon dokumentacji etapu LAB4. Pakiet nie zawiera kopii usług domenowych ani bazy danych.
 
-## Wymagania
+## Wymagania wstępne
 
-- Docker Desktop z `docker compose` albo JDK 21 i Maven do lokalnego uruchomienia serwera,
-- Python 3.12 lub nowszy,
-- wolne porty `8761` (Eureka Server), `8101` (Report Service) i `8102` (Department Service).
+- JDK 21 oraz Apache Maven 3.9.x (do uruchomienia bramki API Gateway),
+- Python 3.12 lub nowszy (do uruchomienia usług z LAB3 oraz testów integracyjnych),
+- wolny port `8080` dla bramki (oraz porty `8761`, `8101` i `8102` dla komponentów z LAB3).
 
-## Uruchomienie rejestru Eureka
+Bramkę należy uruchamiać lokalnie w tym samym systemie operacyjnym co usługi Python. Serwer Eureka może działać w wariancie wybranym na LAB3 (Docker Compose albo Maven).
 
-W katalogu pakietu należy uruchomić:
+## Uruchomienie przykładu i weryfikacja bramki
+
+Przed uruchomieniem bramki należy w osobnych terminalach uruchomić serwer Eureka (`:8761`) oraz dwie usługi demonstracyjne z pakietu `lab3-support`: `LOCKER-SERVICE` (`:8101`) i `PARCEL-SERVICE` (`:8102`).
+
+Następnie z katalogu `lab4-support` należy wykonać:
 
 ```powershell
-docker compose up --build -d eureka
+java -version
+mvn -version
+Set-Location .\gateway
+mvn spring-boot:run
 ```
 
-Panel znajduje się pod adresem `http://localhost:8761/`. 
+Podczas pierwszego uruchomienia Maven pobierze wymagane zależności. Po starcie aplikacji w osobnym terminalu należy zweryfikować działanie endpointu własnego bramki oraz obu skonfigurowanych tras:
 
-## Uruchomienie dwóch usług
+```powershell
+curl.exe -i http://127.0.0.1:8080/health
+curl.exe -i http://127.0.0.1:8080/api/lockers/KRK-1024
+curl.exe -i http://127.0.0.1:8080/api/delivery-check/KRK-1024
+```
 
-Środowisko Python należy utworzyć, a zależności zainstalować z katalogu pakietu:
+Wszystkie trzy żądania powinny zwrócić kod `200 OK`, przy czym odpowiedzi z tras domenowych zawierają nagłówek `X-Gateway: lab4`. Po pierwszym zarejestrowaniu usług w Eurece może być konieczne krótkie odczekanie na odświeżenie lokalnej kopii rejestru w bramce.
+
+Konfiguracja tras znajduje się w pliku `gateway/src/main/resources/application.yml`. Każda zmiana tego pliku wymaga ponownego uruchomienia procesu Maven (`Ctrl+C` i ponowne `mvn spring-boot:run`). Trasy odwołują się do usług przez nazwy logiczne z Eureki (`lb://LOCKER-SERVICE`, `lb://PARCEL-SERVICE`). Bramka pobiera rejestr (`fetch-registry: true`), ale sama nie rejestruje swojej instancji (`register-with-eureka: false`), dlatego nie pojawia się na liście instancji w panelu Eureki.
+
+W razie potrzeby port nasłuchiwania bramki lub adres rejestru Eureka można zmienić przed uruchomieniem Mavena w tym samym terminalu:
+
+```powershell
+$env:GATEWAY_PORT = '8080'
+$env:GATEWAY_EUREKA_URL = 'http://127.0.0.1:8761/eureka/'
+```
+
+Należy pamiętać, że w konfiguracji Spring Cloud adres `GATEWAY_EUREKA_URL` musi kończyć się sufiksem `/eureka/`.
+
+## Uruchomienie testów integracyjnych przykładu
+
+Przy działających czterech procesach (Eureka Server, `LOCKER-SERVICE`, `PARCEL-SERVICE` oraz `API Gateway`), w nowym terminalu otwartym w katalogu `lab4-support` należy wykonać:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pytest tests -q
 ```
 
-**Pierwszy terminal (Report Service)**
+Testy w `tests/test_gateway_demo.py` wysyłają rzeczywiste żądania HTTP do uruchomionej bramki i oczekują wyniku `5 passed`. Jeżeli zmieniono port bramki, przed uruchomieniem `pytest` należy ustawić zmienną `$env:GATEWAY_URL = 'http://127.0.0.1:8088'`.
 
-```powershell
-$env:EUREKA_SERVER_URL = 'http://127.0.0.1:8761'
-$env:SERVICE_NAME = 'REPORT-SERVICE'
-$env:SERVICE_PORT = '8101'
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8101
-```
+We własnym projekcie należy skopiować katalog `gateway` (bez `target/`) do repozytorium projektu z LAB1–LAB3, zastąpić trasy demonstracyjne własnymi oraz przygotować co najmniej cztery własne testy integracyjne zgodnie z główną instrukcją LAB4.
 
-**Drugi terminal (Department Service)**
+## Zatrzymanie procesów
 
-```powershell
-$env:EUREKA_SERVER_URL = 'http://127.0.0.1:8761'
-$env:SERVICE_NAME = 'DEPARTMENT-SERVICE'
-$env:SERVICE_PORT = '8102'
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8102
-```
-
-Po pojawieniu się obu wpisów `UP` w panelu należy wykonać:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8102/reports/1/department-info
-```
-
-Oba terminale należy otworzyć w katalogu pakietu. Należy wcześniej zatrzymać własne aplikacje zajmujące porty `8101` i `8102`. Zmienne trzeba ustawić osobno dla każdego procesu; na czas eksperymentu należy pracować bez `--reload`.
-
-`REPORT-SERVICE` wybiera adres `DEPARTMENT-SERVICE` z lokalnej, okresowo odświeżanej kopii rejestru i wywołuje `GET /departments/1`. Oczekiwana odpowiedź ma status `200` oraz odpowiednie dane departamentu. Eureka nie przekazuje danych biznesowych usług.
-
-Kod HTTP `404` dla `GET /departments/UNKNOWN` oznacza brak departamentu. Inny błąd HTTP zależności jest mapowany na `502`, a brak połączenia lub timeout na `503`. Limit pojedynczego wywołania HTTP wynosi 3 sekundy. Przy kilku instancjach nie jest to limit czasu całego przepływu.
-
-Należy sprawdzić odpowiedzi przez `curl.exe -i http://127.0.0.1:8101/reports/1/department-info` albo dokumentację `/docs`. Po zatrzymaniu `DEPARTMENT-SERVICE` żądanie znanego paczkomatu powinno dać `503`, a `http://127.0.0.1:8102/health` lub `http://127.0.0.1:8102/reports/health` nadal `200`. Po przywróceniu zależności i odświeżeniu rejestru klienta należy ponownie oczekiwać `200` z danymi. Wpis `UP` nie gwarantuje dostępności procesu; aktualizacja rejestru i jego lokalnej kopii nie jest natychmiastowa.
-
-## Testy jednostkowe
-
-Testy nie wymagają działającego serwera Eureka:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-Testy sprawdzają wywołanie po nazwie, przekazanie limitu czasu, zachowanie kontraktu danych, cykl życia klienta oraz odpowiedzi `404`, `502` i `503`. Atrapa nie potwierdza rzeczywistej rejestracji; należy osobno wykonać scenariusze ręczne z instrukcji głównej.
-
-## Zatrzymanie
-
-Oba procesy Uvicorna należy zatrzymać skrótem `Ctrl+C`. Serwer Eureka należy zatrzymać w zależności od wybranej metody:
-
-```powershell
-docker compose down
-```
-
-Jeśli Eureka działa przez Maven, proces należy zakończyć skrótem `Ctrl+C` w terminalu, w którym uruchomiono `mvn spring-boot:run`.
-
-Adresy i porty można zmieniać przez zmienne środowiskowe, ale port klienta rejestrowany w Eurece musi odpowiadać portowi Uvicorna. `SERVICE_PORT` w przykładzie jest używany przez klienta rejestru; parametr `--port` uruchamia serwer HTTP.
+Proces bramki należy zatrzymać skrótem `Ctrl+C` w terminalu Mavena. Następnie należy zatrzymać obie usługi Python oraz serwer Eureka metodą wybraną w LAB3.
