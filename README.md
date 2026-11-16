@@ -1,104 +1,82 @@
-# IT Report Service — LAB2
+# Report Service - LAB3
 
-Uzupełnienie dla Lab 1. Celem serwisu jest obługa zgłoszeń IT z zastosowaniem bazy danych SQL oraz warstwy pamięci podręcznej cache o nazwie Redis, stosującacą mechanizm *cache-aside*.
+Projekt tworzy architekturę opartą na dwóch mikrousługach zintegrowanych z **Eureka Server**, wykorzystujących bazę danych SQLite i pamięć cache Redis z LAB2.
 
-## Zmiany i decyzje
+## Wymagania
 
-- **Co zachowano z LAB1:** Model Pydantic, endpointy dla API, logika biznesowa, odpowiedzi HTTP
-- **Co zmieniono i dlaczego:** Zaminana tymczasowej bazy RAM w bazę SQLite używaną przez SQLAlchemy, co umożliwia niezależność operacji. Dodanie warstwy pamięci podręcznej Redis w celu przyspieszenia odczytu zasobów.
-- **Właściciel danych oraz granice drugiej usługi:** Report Service jest odpowiedzialny za zgłaszanie awarii, a walidacja departamentów odbywa się poprzez powiązanie z Department Service
-- **Model tabel, klucze, powiązania i ograniczenia:** Tabela `reports` zawierająca klucz główny `id` z opcją autoinkrementacji, pola tekstowe oraz ograniczeniem `unique=True` na kolumnie `description` w celu zapewnieniau unikalności opisu.
-- **Zachowana reguła biznesowa, operacja dozwolona i odrzucona:** 
-    - Nowe zgłoszenie otrzymuje automatycznie status `unsolved`. 
-    - Próba dodania zgłoszenia z istniejącym opisem skutkuje  odrzuceniem operacji z kodem `409 Conflict` bez modyfikacji stanu bazy.
-- **Odczyt objęty cache, uzasadnienie, dopuszczalna nieaktualność:** 
-    - Odczyt szczegółów zgłoszenia dla `GET /reports/{id}`. 
-    - Uzasadnienie: czestę wykonywanie operacji odczytu pojedynczego zasobu, a dopuszczalna nieaktualność danych jest ograniczona czasem TTL.
-- **Prefiks, klucz, TTL, unieważnianie po zapisie:** 
-    - **Prefiks**: `$env:CACHE_PREFIX`: `lab2:131534:report`
-    - **Klucz**: `{prefiks}:report:{id}`
-    - **TTL**: domyślnie `60` sekund
-    - **Unieważnienie**: operacja modyfikacji lub usunięcia zasobu powoduje usunięcie klucza z Redis.
+- Docker Desktop z `docker compose` albo JDK 21 i Maven do lokalnego uruchomienia serwera,
+- Python 3.12 lub nowszy,
+- wolne porty `8761` (Eureka Server), `8101` (Report Service) i `8102` (Department Service).
 
-## Uruchomienie
+## Uruchomienie rejestru Eureka
 
-Python minimum 3.12+, PowerShell, Docker
-
-Do uruchomienia w tym katalogu:
-
+W katalogu pakietu należy uruchomić:
 
 ```powershell
-#Konfiguracja środowiska
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m pytest -q
-
-
-# Uruchomienie API
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8101
-
-#Określenie parametrów środowiska
-$env:DATABASE_URL = 'sqlite:///./app.db'
-$env:CACHE_PREFIX = 'lab2:131534:report' 
-$env:CACHE_TTL_SECONDS = '60'
-
-#Uruchomienie Redis
-docker run --name lab2-redis -p 127.0.0.1:6379:6379 -d redis:7-alpine
-$env:REDIS_URL = 'redis://localhost:6379/0'
+docker compose up --build -d eureka
 ```
 
-## Dowody
+Panel znajduje się pod adresem `http://localhost:8761/`. 
 
-| Scenariusz | Stan początkowy i żądanie | Oczekiwany wynik | Wynik rzeczywisty | Reset |
-|---|---|---|---|---|
-| Zapis i odczyt po restarcie bez cache | Dodanie zgłoszenia, restart aplikacji bez cache | Poprawny odczyt danych z SQL | Zgodny | Automatyczny |
-| Reguła: sukces i odrzucenie bez zmiany | Baza z istniejącym wpisem, próba ponownego dodania identycznego wpisu | Status 409 Conflict, brak zmiany w bazie danych | Zgodny | Automatyczny |
-| MISS → HIT, liczba odczytów bazy | GET /reports/1 i następny GET | Pierwszy: MISS, drugi: HIT | Zgodny | Automatyczny |
-| Wygaśnięcie TTL | Próba odczytu po upływie określonego czasu TTL | Ponowne pobranie danych z bazy - MISS | Zgodny | Automatyczny |
-| Zmiana i unieważnienie | Usunięcie lub edycja zasobu i ponowne użycie GET | Usunięcie cache, następnę żądanie zwraca MISS | Zgodny | Automatyczny |
-| Awaria GET, SET, DELETE cache | Odłączenie Redis | Przejście w tryb bypass, wykonanie operacji w bazie działa prawidłowo | Zgodny | Automatyczny |
-| Przywrócenie Redis, możliwa stara wartość | Powrót połączenia | Powrót buforowania | Zgodny | Automatyczny |
+## Uruchomienie dwóch usług
 
-Testy z LAB1:
-- **Test Health:** Sprawdza poprawność działania endpointu /health i zwracany status usługi.   
-- **Test listy i szczegółów:** Weryfikuje poprawność pobierania listy zgłoszeń oraz szczegółów konkretnego zasobu.   
-- **Test zapisu i odczytu:** Testuje poprawne utworzenie nowego zgłoszenia (POST /reports) i jego odczyt.   
-- **Test braku zasobu:** Sprawdza zwrócenie kodu 404 Not Found dla nieistniejącego identyfikatora.   
-- **Test usunięcia zasobu:** Weryfikuje usunięcie zgłoszenia kończące się kodem 204 No Content.   
-- **Test błędnych danych:** Sprawdza obsługę błędów walidacji danych wejściowych biblioteki Pydantic (422 Unprocessable Entity).   
-- **Test konfliktu:** Weryfikuje zwrócenie kodu 409 Conflict przy próbie utworzenia zgłoszenia z duplikatem opisu.   
-- **Test reguły biznesowej:** Sprawdza zachowanie dozwolonych i niedozwolonych operacji bez zmiany stanu bazy.   
-- **Test restartu:** Sprawdza zachowanie systemu po restarcie procesu i wyczyszczeniu stanu pamięci.   
+Środowisko Python należy utworzyć, a zależności zainstalować z katalogu pakietu:
 
-Testy z LAB2 z użyciem zamiennika:
-- **Test perspektywy nowej instancji silnika (test_persists_with_new_engine):** Sprawdza trwałość danych i poprawność odczytu przy użyciu nowej sesji bazy danych.   
-- **Test wycofania duplikatu (test_duplicate_rolls_back):** Weryfikuje, że próba dodania zduplikowanego zgłoszenia wywołuje błąd i wycofuje transakcję, zachowując spójność bazy.   
-- **Test cyklu MISS → HIT i inwalidacji (test_miss_hit_and_invalidation):** Sprawdza poprawne przejście cache ze stanu MISS do HIT oraz inwalidację (usuwanie) klucza po usunięciu zasobu.   
-- **Test odporności na błąd zapisu (test_failed_cache_set_still_returns_database_value):** Weryfikuje, że błąd podczas zapisu do cache nie przerywa działania aplikacji i poprawnie zwraca wartość bezpośrednio z bazy danych. 
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
 
-Ręczne próby z rzeczywistym Redis:
-- **Test polecenia PING:** Weryfikacja poprawnego połączenia z prawdziwym serwerem Redis.   
-- **Weryfikacja MISS → HIT oraz TTL:** Sprawdzenie przejścia ze stanu MISS do HIT przy ponownym odczycie oraz kontrola czasu życia (TTL) utworzonego klucza.   
-- **Odczyt po wygaśnięciu TTL:** Obserwacja zachowania systemu i odświeżenia danych po upływie zdefiniowanego czasu TTL.   
-- **Odłączenie klienta (Tryb BYPASS):** Zmiana adresu REDIS_URL na nieużywany port w celu symulacji awarii i sprawdzenia, czy operacje przechodzą w tryb BYPASS.   
-- **Operacja modyfikacji przy awarii:** Sprawdzenie zachowania systemu i stanu bazy podczas próby edycji danych w warunkach niedostępności cache.   
-- **Przywrócenie konfiguracji Redis:** Przywrócenie poprawnego adresu serwera, weryfikacja wystąpienia starej wartości (przed wygaśnięciem TTL) oraz przejścia na aktualną wartość z bazy po upływie TTL.   
+**Pierwszy terminal (Report Service)**
 
-## Porównanie i ograniczenia
+```powershell
+$env:EUREKA_SERVER_URL = 'http://127.0.0.1:8761'
+$env:SERVICE_NAME = 'REPORT-SERVICE'
+$env:SERVICE_PORT = '8101'
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8101
+```
 
-- **Nieudane unieważnienie:** Jeśli podczas modyfikacji lub usunięcia zasobu w bazie danych wystąpi problem z połączeniem z Redisem, Usunięcia klucza z cache może się nie udać. W pamięci cache pozostanie stara wartość, która będzie zwracana klientom aż do momentu wygaśnięcia TTL.   
-- **Współbieżność:** Prosty cache-aside nie rozwiązuje problemu współbieżności i nie gwarantuje spójności danych w przypadku wykonywania wielu operacji zapisu i odczytu w  przez różne wątki lub procesy w tym samym czasie.   
-- **Zmiany schematu:** Baza danych SQLite jest tworzona automatycznie przy użyciu metody create_all, przez cokażda modyfikacja struktury tabel zgłoszeń wymaga migracji schematu lub ręcznego odtworzenia bazy, ponieważ tabele nie są aktualizowane z tą metodą.
-- **Zastosowanie cache** jest uzasadnione dla usługi obsługującej zgłoszenia IT, ponieważ operacje odczytu szczegółów zgłoszeń są częste, a chwilowa nieaktualność danych nie wpływa negatywnie na proces biznesowy, dzięki czemu odciąża bazę danych i skraca czas odpowiedzi od API.
+**Drugi terminal (Department Service)**
 
-## Dokumentacja i autorzy
+```powershell
+$env:EUREKA_SERVER_URL = 'http://127.0.0.1:8761'
+$env:SERVICE_NAME = 'DEPARTMENT-SERVICE'
+$env:SERVICE_PORT = '8102'
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8102
+```
 
-| Źródło | Problem | Zastosowanie | Weryfikacja |
-|---|---|---|---|
-|https://fastapi.tiangolo.com/ |Walidacja danych wejściowych JSON,obsługa niestandardowych kodów błędów| Modele Pydantic oraz HTTPException z odpowiednimi statusami HTTP|Wykonanie automatycznych testów dla kodów 404, 409 i 422|
-| https://docs.sqlalchemy.org/ | Konfiguracja relacyjnej bazy danych, fabryki sesji, mapowanie ORM | Zaimplementowanie make_database, Base i modelu ReportRow | Testy integracyjne oraz izolacja bazy w katalogu tymczasowym |
+Po pojawieniu się obu wpisów `UP` w panelu należy wykonać:
 
+```powershell
+Invoke-RestMethod http://127.0.0.1:8102/reports/1/department-info
+```
 
-- Wkład każdej osoby: Bartosz Winczowski - implementacja struktury modularnego monolitu, SQL, cache, testów integracyjnych i dokumentacji.
-- AI: Gemini, pomoc przy projektowaniu struktury aplikacji, rozwiązywaniu problemów z izolacją testów w pytest oraz weryfikacji błędów. Weryfikacja: kod oraz testy zostały uruchomione i zweryfikowane lokalnie.   
-- Kolejny etap pierwszej i planowanej drugiej usługi: Izolacja Department Service jako niezależnej mikrousługi komunikującej się przez HTTP.
+Oba terminale należy otworzyć w katalogu pakietu. Należy wcześniej zatrzymać własne aplikacje zajmujące porty `8101` i `8102`. Zmienne trzeba ustawić osobno dla każdego procesu; na czas eksperymentu należy pracować bez `--reload`.
+
+`REPORT-SERVICE` wybiera adres `DEPARTMENT-SERVICE` z lokalnej, okresowo odświeżanej kopii rejestru i wywołuje `GET /departments/1`. Oczekiwana odpowiedź ma status `200` oraz odpowiednie dane departamentu. Eureka nie przekazuje danych biznesowych usług.
+
+Kod HTTP `404` dla `GET /departments/UNKNOWN` oznacza brak departamentu. Inny błąd HTTP zależności jest mapowany na `502`, a brak połączenia lub timeout na `503`. Limit pojedynczego wywołania HTTP wynosi 3 sekundy. Przy kilku instancjach nie jest to limit czasu całego przepływu.
+
+Należy sprawdzić odpowiedzi przez `curl.exe -i http://127.0.0.1:8101/reports/1/department-info` albo dokumentację `/docs`. Po zatrzymaniu `DEPARTMENT-SERVICE` żądanie znanego paczkomatu powinno dać `503`, a `http://127.0.0.1:8102/health` lub `http://127.0.0.1:8102/reports/health` nadal `200`. Po przywróceniu zależności i odświeżeniu rejestru klienta należy ponownie oczekiwać `200` z danymi. Wpis `UP` nie gwarantuje dostępności procesu; aktualizacja rejestru i jego lokalnej kopii nie jest natychmiastowa.
+
+## Testy jednostkowe
+
+Testy nie wymagają działającego serwera Eureka:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Testy sprawdzają wywołanie po nazwie, przekazanie limitu czasu, zachowanie kontraktu danych, cykl życia klienta oraz odpowiedzi `404`, `502` i `503`. Atrapa nie potwierdza rzeczywistej rejestracji; należy osobno wykonać scenariusze ręczne z instrukcji głównej.
+
+## Zatrzymanie
+
+Oba procesy Uvicorna należy zatrzymać skrótem `Ctrl+C`. Serwer Eureka należy zatrzymać w zależności od wybranej metody:
+
+```powershell
+docker compose down
+```
+
+Jeśli Eureka działa przez Maven, proces należy zakończyć skrótem `Ctrl+C` w terminalu, w którym uruchomiono `mvn spring-boot:run`.
+
+Adresy i porty można zmieniać przez zmienne środowiskowe, ale port klienta rejestrowany w Eurece musi odpowiadać portowi Uvicorna. `SERVICE_PORT` w przykładzie jest używany przez klienta rejestru; parametr `--port` uruchamia serwer HTTP.
